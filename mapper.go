@@ -215,68 +215,99 @@ func (or *RecordList) GetGridRecords() (nr *RecordList) {
 	return nr
 }
 
+func dmsToDD(latDeg, latMin, latSec, lonDeg, lonMin, lonSec float64) (ddLat, ddLon float64) {
+	ddLat = latDeg + latMin/60 + latSec/3600
+	ddLon = lonDeg + lonMin/60 + lonSec/3600
+	return
+}
+
+func llParse(coord string) (parsed float64) {
+	parsed, err := strconv.ParseFloat(coord, 64)
+	if err != nil {
+		return 0
+	}
+	return
+}
+
 func NewRecordList(data io.Reader, name string) (rl *RecordList) {
 	rl = &RecordList{}
 	rl.name = name
+	dmsPattern := regexp.MustCompile(`^-?\d{2},([0-5]?\d),([0-5]?\d(\.\d{1,2})?)?,\d{3},([0-5]?\d),([0-5]?\d(\.\d{1,2})?)?$`)
+	ddPattern := regexp.MustCompile(`^\-?\d{2}(\.\d{0,10})?,\d{3}(\.\d{0,10})?$`)
 
 	dataScanner := bufio.NewScanner(data)
 
 	for dataScanner.Scan() {
 		line := strings.TrimSpace(dataScanner.Text())
-		matchPattern, _ := regexp.MatchString(`^\-?\d{2}(\.\d{0,10})?,\d{3}(\.\d{0,10})?$`, line)
+		splitLine := strings.Split(line, ",")
 
-		// This algorithm silently discards lines that don't match the expected pattern
-		// Perhaps keep count and tell the user that lines have been discarded
-		if matchPattern {
-			splitLine := strings.Split(line, ",")
-			lat, err := strconv.ParseFloat(splitLine[0], 64)
-			if err != nil {
-				lat = 0
+		if dmsPattern.MatchString(line) {
+			var lat, lon float64
+			latDeg := llParse(splitLine[0])
+			latMin := llParse(splitLine[1])
+			latSec := llParse(splitLine[2])
+			lonDeg := llParse(splitLine[3])
+			lonMin := llParse(splitLine[4])
+			lonSec := llParse(splitLine[5])
+			lat, lon = dmsToDD(latDeg, latMin, latSec, lonDeg, lonMin, lonSec)
+			rec := newRecord(lat, lon)
+			if rec.gridH > 0 && rec.gridH < 50 && rec.gridV > 0 && rec.gridV < 50 {
+				rl.numRecs++
+				rl.recordSlice = append(rl.recordSlice, *rec)
 			}
-			lon, err := strconv.ParseFloat(splitLine[1], 64)
-			if err != nil {
-				lon = 0
-			}
+		} else if ddPattern.MatchString(line) {
+			lat := llParse(splitLine[0])
+			lon := llParse(splitLine[1])
 
 			rec := newRecord(lat, lon)
-
 			if rec.gridH > 0 && rec.gridH < 50 && rec.gridV > 0 && rec.gridV < 50 {
 				rl.numRecs++
 				rl.recordSlice = append(rl.recordSlice, *rec)
 			}
 		}
 	}
-
 	return rl
 }
 
 func NewVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 	tempList := new(RecordList)
 	tempList.name = name
+	dmsPattern := regexp.MustCompile(`^-?\d{2},([0-5]?\d),([0-5]?\d(\.\d{1,2})?)?,\d{3},([0-5]?\d),([0-5]?\d(\.\d{1,2})?)?,[01]$`)
+	ddPattern := regexp.MustCompile(`^\-?\d{2}(\.\d{0,10})?,\d{3}(\.\d{0,10})?,[01]$`)
 
 	dataScanner := bufio.NewScanner(data)
 
 	for dataScanner.Scan() {
 		line := strings.TrimSpace(dataScanner.Text())
-		matchPattern, _ := regexp.MatchString(`^\-?\d{2}(\.\d{0,10})?,\d{3}(\.\d{0,10})?,[01]$`, line)
+		splitLine := strings.Split(line, ",")
 
-		if matchPattern {
-			splitLine := strings.Split(line, ",")
-			lat, err := strconv.ParseFloat(splitLine[0], 64)
+		if dmsPattern.MatchString(line) {
+			var lat, lon float64
+			latDeg := llParse(splitLine[0])
+			latMin := llParse(splitLine[1])
+			latSec := llParse(splitLine[2])
+			lonDeg := llParse(splitLine[3])
+			lonMin := llParse(splitLine[4])
+			lonSec := llParse(splitLine[5])
+			voucher, err := strconv.Atoi(splitLine[6])
 			if err != nil {
-				lat = 0
+				voucher = 0
 			}
-			lon, err := strconv.ParseFloat(splitLine[1], 64)
-			if err != nil {
-				lon = 0
+			lat, lon = dmsToDD(latDeg, latMin, latSec, lonDeg, lonMin, lonSec)
+			rec := newVoucherRecord(lat, lon, voucher)
+			if rec.gridH > 0 && rec.gridH < 50 && rec.gridV > 0 && rec.gridV < 50 {
+				tempList.numRecs++
+				tempList.recordSlice = append(tempList.recordSlice, *rec)
 			}
+		} else if ddPattern.MatchString(line) {
+			lat := llParse(splitLine[0])
+			lon := llParse(splitLine[1])
+
 			voucher, err := strconv.Atoi(splitLine[2])
 			if err != nil {
 				voucher = 0
 			}
-
 			rec := newVoucherRecord(lat, lon, voucher)
-
 			if rec.gridH > 0 && rec.gridH < 50 && rec.gridV > 0 && rec.gridV < 50 {
 				tempList.numRecs++
 				tempList.recordSlice = append(tempList.recordSlice, *rec)
