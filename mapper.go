@@ -184,14 +184,14 @@ func (or *RecordList) GetGridRecords() (nr *RecordList) {
 	for _, rec := range or.recordSlice {
 		// If cell contains no record mark cell 1 if voucher, 2 if anecdotal
 		if nr.voucherGrid[rec.gridH][rec.gridV] == 0 {
-			if rec.voucher == 1 {
+			if rec.voucher {
 				nr.voucherGrid[rec.gridH][rec.gridV] = 1
 			} else {
 				nr.voucherGrid[rec.gridH][rec.gridV] = 2
 			}
 			// If the cell is only unvouchered and the new record in vouchered, mark it 1 - vouchered
 		} else if nr.voucherGrid[rec.gridH][rec.gridV] == 2 {
-			if rec.voucher == 1 {
+			if rec.voucher {
 				nr.voucherGrid[rec.gridH][rec.gridV] = 1
 			} // There is no case for cells marked as vouchered already, as there is nothing to do.
 		}
@@ -229,9 +229,27 @@ func llParse(coord string) (parsed float64) {
 	return
 }
 
-func NewRecordList(data io.Reader, name string) (rl *RecordList) {
+func NewRecordList(coordData string, name string) (rl *RecordList) {
+	firstLine := strings.TrimSpace(strings.Split(coordData, "\n")[0])
+	dataReader := strings.NewReader(coordData)
+
+	// Regular expressions that define whether the data is in decimal degrees or degrees,
+	// minutes and seconds, and whether the data contains voucher information or not
+	voucherData := regexp.MustCompile(`^(-?[34][90123](\.\d{0,10})?,14[45678](\.\d{0,10})?,[av]|\-?[34][90123],([0123456])?\d,(([0123456])?\d(\.\d{1,2})?)?,14[5678],([0123456])?\d,(([0123456])?\d(\.\d{1,2})?)?,[av])$`)
+	nonVoucherData := regexp.MustCompile(`^(-?[34][90123],([0-5])?\d,([0-5]\d(\.\d{1,9})?)?,14[5678],([0-5])?\d,([0-5]\d(\.\d{1,9})?)?|-?\d{2}(\.\d{0,10})?,\d{3}(\.\d{0,10})?)$`)
+
+	if voucherData.MatchString(firstLine) {
+		rl = newVoucherRecordList(dataReader, name)
+	} else if nonVoucherData.MatchString(firstLine) {
+		rl = newNonVoucherRecordList(dataReader, name)
+	}
+	return rl
+}
+
+func newNonVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 	rl = &RecordList{}
 	rl.name = name
+
 	dmsPattern := regexp.MustCompile(`^-?\d{2},([0-5]?\d),([0-5]?\d(\.\d{1,2})?)?,\d{3},([0-5]?\d),([0-5]?\d(\.\d{1,2})?)?$`)
 	ddPattern := regexp.MustCompile(`^\-?\d{2}(\.\d{0,10})?,\d{3}(\.\d{0,10})?$`)
 
@@ -269,11 +287,11 @@ func NewRecordList(data io.Reader, name string) (rl *RecordList) {
 	return rl
 }
 
-func NewVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
+func newVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 	tempList := new(RecordList)
 	tempList.name = name
-	dmsPattern := regexp.MustCompile(`^-?\d{2},([0-5]?\d),([0-5]?\d(\.\d{1,2})?)?,\d{3},([0-5]?\d),([0-5]?\d(\.\d{1,2})?)?,[01]$`)
-	ddPattern := regexp.MustCompile(`^\-?\d{2}(\.\d{0,10})?,\d{3}(\.\d{0,10})?,[01]$`)
+	dmsPattern := regexp.MustCompile(`^-?[34]\d,[12345]?\d,([12345]?\d(\.\d{1,3})?)?,14[45678],[12345]?\d,([12345]?\d(\.\d{1,3})?)?,[av]$`)
+	ddPattern := regexp.MustCompile(`^-?[34]\d\.\d{1,9},14[45678].\d{1,9},[av]$`)
 
 	dataScanner := bufio.NewScanner(data)
 
@@ -289,10 +307,9 @@ func NewVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 			lonDeg := llParse(splitLine[3])
 			lonMin := llParse(splitLine[4])
 			lonSec := llParse(splitLine[5])
-			voucher, err := strconv.Atoi(splitLine[6])
-			if err != nil {
-				voucher = 0
-			}
+
+			voucher := splitLine[6]
+
 			lat, lon = dmsToDD(latDeg, latMin, latSec, lonDeg, lonMin, lonSec)
 			rec := newVoucherRecord(lat, lon, voucher)
 			if rec.gridH > 0 && rec.gridH < 50 && rec.gridV > 0 && rec.gridV < 50 {
@@ -303,10 +320,8 @@ func NewVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 			lat := llParse(splitLine[0])
 			lon := llParse(splitLine[1])
 
-			voucher, err := strconv.Atoi(splitLine[2])
-			if err != nil {
-				voucher = 0
-			}
+			voucher := splitLine[2]
+
 			rec := newVoucherRecord(lat, lon, voucher)
 			if rec.gridH > 0 && rec.gridH < 50 && rec.gridV > 0 && rec.gridV < 50 {
 				tempList.numRecs++
@@ -325,7 +340,7 @@ type record struct {
 	dotH, dotV   int
 	gridH, gridV int
 	rad          int
-	voucher      int // Vouchered = 1, anecdotal = 0
+	voucher      bool
 }
 
 func newRecord(lat, lon float64) (r *record) {
@@ -365,10 +380,14 @@ func newRecord(lat, lon float64) (r *record) {
 	return r
 }
 
-func newVoucherRecord(lat, lon float64, voucher int) (r *record) {
+func newVoucherRecord(lat, lon float64, voucher string) (r *record) {
 	r = new(record)
 	r.lat, r.lon = lat, lon
-	r.voucher = voucher
+	if voucher == "v" {
+		r.voucher = true
+	} else {
+		r.voucher = false
+	}
 
 	if r.lat > 0 {
 		r.lat = lat * -1 // In case hemispheres are switched. This program is only for Tasmanian data
