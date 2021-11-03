@@ -1,4 +1,4 @@
-module github.com/kurankat/svgmapper
+module github.com/kurankat/tasmapper
 
 go 1.17
 
