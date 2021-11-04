@@ -133,7 +133,7 @@ func TestNewRecordListVouchered(t *testing.T) {
 	equals(t, utmN, ml.recordSlice[1].utmN)
 }
 
-func TestNewNonRecordListUnvouchered(t *testing.T) {
+func TestNewRecordListUnvouchered(t *testing.T) {
 	ml := NewRecordList(mixedNonVoucher, "Test taxon")
 	testLat := (41.0 + (23.0 / 60) + 45.4/3600) * -1
 	testLong := 145 + 24.0/60 + 54.2/3600
