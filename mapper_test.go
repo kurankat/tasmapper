@@ -33,7 +33,7 @@ var mixedNonVoucher string = `41,23,45.4,145,24,54.2
 
 var mixedVouchered string = `-42.63341,147.75224,v
 -42.23342,147.75223,a
-41,24,0,145,24,0,v
+41,24,0,145,24,0,1
 -41.34221,145.43442,a
 41,24,,145,24,,v`
 
@@ -85,13 +85,13 @@ func TestUnvoucheredRecord(t *testing.T) {
 
 func TestVoucheredRecord(t *testing.T) {
 
-	record := newVoucherRecord(-41.34221, 145.43442, "v")
+	record := newVoucherRecord(-41.34221, 145.43442, true)
 
 	equals(t, -41.34221, record.lat)
 	equals(t, 145.43442, record.lon)
 	equals(t, true, record.voucher)
 
-	record = newVoucherRecord(-41.34221, 145.43442, "a")
+	record = newVoucherRecord(-41.34221, 145.43442, false)
 	equals(t, false, record.voucher)
 }
 
