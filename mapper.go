@@ -310,7 +310,7 @@ func newVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 	tempList := new(RecordList)
 	tempList.name = name
 	dmsPattern := regexp.MustCompile(`^-?[34]\d,[12345]?\d,([12345]?\d(\.\d{1,3})?)?,14[45678],[12345]?\d,([12345]?\d(\.\d{1,3})?)?,[av01]$`)
-	ddPattern := regexp.MustCompile(`^-?[34]\d\.\d{1,9},14[45678].\d{1,9},[av01]$`)
+	ddPattern := regexp.MustCompile(`^-?[34]\d(\.\d{1,9})?,14[45678](\.\d{1,9})?,[av01]$`)
 
 	dataScanner := bufio.NewScanner(data)
 

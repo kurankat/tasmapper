@@ -23,20 +23,6 @@ const (
 	utmN    = 5324033
 )
 
-// two anecdotal records and two vouchered, but the first anecdotal is
-// overlapped by a vouchered record (2 voucher cells 1 anecdotal)
-var mixedNonVoucher string = `41,23,45.4,145,24,54.2
--41.34221,145.43442
-43,12,,146,23,
--42.63341,147.75224
--42.23342,147.75223`
-
-var mixedVouchered string = `-42.63341,147.75224,v
--42.23342,147.75223,a
-41,24,0,145,24,0,1
--41.34221,145.43442,a
-41,24,,145,24,,v`
-
 // // assert fails the test if the condition is false.
 // func assert(tb testing.TB, condition bool, msg string, v ...interface{}) {
 // 	if !condition {
@@ -95,6 +81,12 @@ func TestVoucheredRecord(t *testing.T) {
 	equals(t, false, record.voucher)
 }
 
+var mixedVouchered string = `-42.63341,147.75224,v
+-42.23342,147.75223,a
+41,24,0,145,24,0,1
+-41.34221,145.43442,a
+41,24,,145,24,,v`
+
 func TestNewRecordListVouchered(t *testing.T) {
 	ml := NewRecordList(mixedVouchered, "Test taxon")
 
@@ -133,6 +125,14 @@ func TestNewRecordListVouchered(t *testing.T) {
 	equals(t, utmN, ml.recordSlice[1].utmN)
 }
 
+// two anecdotal records and two vouchered, but the first anecdotal is
+// overlapped by a vouchered record (2 voucher cells 1 anecdotal)
+var mixedNonVoucher string = `41,23,45.4,145,24,54.2
+-41.34221,145.43442
+43,12,,146,23,
+-42.63341,147.75224
+-42.23342,147.75223`
+
 func TestNewRecordListUnvouchered(t *testing.T) {
 	ml := NewRecordList(mixedNonVoucher, "Test taxon")
 	testLat := (41.0 + (23.0 / 60) + 45.4/3600) * -1
@@ -157,4 +157,22 @@ func TestNewRecordListUnvouchered(t *testing.T) {
 	equals(t, testrad, ml.recordSlice[4].rad)
 	equals(t, utmE, ml.recordSlice[4].utmE)
 	equals(t, utmN, ml.recordSlice[4].utmN)
+}
+
+var newTestRecords string = `42,147,0
+42.0,147.0,1
+41,146,a
+40.1,145.1,v
+`
+
+func TestRecordListDebugging(t *testing.T) {
+	tl := NewRecordList(newTestRecords, "Test record")
+
+	equals(t, 4, len(tl.recordSlice))
+	equals(t, 4, tl.RecordNumber())
+	equals(t, true, tl.recordSlice[1].voucher)
+	equals(t, true, tl.recordSlice[3].voucher)
+	equals(t, false, tl.recordSlice[0].voucher)
+	equals(t, false, tl.recordSlice[2].voucher)
+
 }
