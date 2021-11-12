@@ -177,17 +177,42 @@ func TestRecordListDebugging(t *testing.T) {
 
 }
 
+// 20 records
+// 11 vouchered
+// 9 anecdotal
+var comprehensiveVtest string = `-42.63341,147.75224,v
+-42.23342,147.75223,a
+43.01233,146.25456,v
+41.34221,145.43442,a
+43.21233,146.25456,1
+41.94221,145.43442,0
+41,29,0.2,145,29,0.65,v
+42,24,55.2,146,24,0.65,a
+41,44,0.2,145,14,0.65,1
+42,14,55.2,146,34,0.65,0
+42,148,0
+41,146,1
+43,146,a
+40,147,v
+41,24,,145,24,,v
+41,3,,146,55,,a
+41,54,,145,14,,1
+41,13,,146,35,,0
+42.0,147.0,1
+41.0,145.0,v
+`
+
 func TestVoucherMap(t *testing.T) {
 	name := "Test"
-	// cells := 4
-	records := 4
-	anecdotal := 1
-	vouchered := 2
+	cells := 20
+	records := 20
+	anecdotal := 9
+	vouchered := 11
 
-	mapRegex := fmt.Sprintf(`^(?s).*<svg\n *viewBox.*infoBox.*%s.*\d cells.*Total records: %d.*<\/svg>.*$`, name, records)
+	mapRegex := fmt.Sprintf(`^(?s).*<svg\n *viewBox.*infoBox.*%s.*\d* cells.*Total records: %d.*<\/svg>.*$`, name, records)
 	gridMapPattern := regexp.MustCompile(mapRegex)
 
-	tl := NewRecordList(newTestRecords, "Test")
+	tl := NewRecordList(comprehensiveVtest, "Test")
 
 	voucherDotRegex := regexp.MustCompile(`(?m)^<circle cx="\d*" cy="\d*" r="\d" style="fill:black.*" \/>$`)
 	nonVoucherDotRegex := regexp.MustCompile(`(?m)^<circle cx="\d*" cy="\d*" r="\d" style="fill:white.*" \/>$`)
@@ -198,9 +223,9 @@ func TestVoucherMap(t *testing.T) {
 	mapString := mapBuffer.String()
 
 	equals(t, true, gridMapPattern.MatchString(mapString))
+	equals(t, cells, tl.numCells)
 	equals(t, vouchered, len(voucherDotRegex.FindAllString(mapString, -1)))
 	equals(t, anecdotal, len(nonVoucherDotRegex.FindAllString(mapString, -1)))
-
 }
 
 func TestNonVoucherGridMap(t *testing.T) {
