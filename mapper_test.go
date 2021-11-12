@@ -1,9 +1,11 @@
 package tasmapper
 
 import (
+	"bytes"
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"testing"
 )
@@ -125,8 +127,6 @@ func TestNewRecordListVouchered(t *testing.T) {
 	equals(t, utmN, ml.recordSlice[1].utmN)
 }
 
-// two anecdotal records and two vouchered, but the first anecdotal is
-// overlapped by a vouchered record (2 voucher cells 1 anecdotal)
 var mixedNonVoucher string = `41,23,45.4,145,24,54.2
 -41.34221,145.43442
 43,12,,146,23,
@@ -162,7 +162,7 @@ func TestNewRecordListUnvouchered(t *testing.T) {
 var newTestRecords string = `42,147,0
 42.0,147.0,1
 41,146,a
-40.1,145.1,v
+41.1,145.1,v
 `
 
 func TestRecordListDebugging(t *testing.T) {
@@ -174,5 +174,96 @@ func TestRecordListDebugging(t *testing.T) {
 	equals(t, true, tl.recordSlice[3].voucher)
 	equals(t, false, tl.recordSlice[0].voucher)
 	equals(t, false, tl.recordSlice[2].voucher)
+
+}
+
+func TestVoucherMap(t *testing.T) {
+	name := "Test"
+	// cells := 4
+	records := 4
+	anecdotal := 1
+	vouchered := 2
+
+	mapRegex := fmt.Sprintf(`^(?s).*<svg\n *viewBox.*infoBox.*%s.*\d cells.*Total records: %d.*<\/svg>.*$`, name, records)
+	gridMapPattern := regexp.MustCompile(mapRegex)
+
+	tl := NewRecordList(newTestRecords, "Test")
+
+	voucherDotRegex := regexp.MustCompile(`(?m)^<circle cx="\d*" cy="\d*" r="\d" style="fill:black.*" \/>$`)
+	nonVoucherDotRegex := regexp.MustCompile(`(?m)^<circle cx="\d*" cy="\d*" r="\d" style="fill:white.*" \/>$`)
+
+	mapBuffer := new(bytes.Buffer)
+	VoucherMap(tl, mapBuffer)
+
+	mapString := mapBuffer.String()
+
+	equals(t, true, gridMapPattern.MatchString(mapString))
+	equals(t, vouchered, len(voucherDotRegex.FindAllString(mapString, -1)))
+	equals(t, anecdotal, len(nonVoucherDotRegex.FindAllString(mapString, -1)))
+
+}
+
+func TestNonVoucherGridMap(t *testing.T) {
+	name := "Test"
+	cells := 5
+	records := 5
+
+	mapRegex := fmt.Sprintf(`^(?s).*<svg\n *viewBox.*infoBox.*%s.*%d cells.*Total records: %d.*<\/svg>.*$`, name, cells, records)
+	gridMapPattern := regexp.MustCompile(mapRegex)
+
+	tl := NewRecordList(mixedNonVoucher, "Test")
+
+	dotRegex := regexp.MustCompile(`(?m)^<circle cx="\d*" cy="\d*" r="\d" style="fill:black.*" \/>$`)
+
+	mapBuffer := new(bytes.Buffer)
+	GridMap(tl, mapBuffer)
+
+	mapString := mapBuffer.String()
+
+	equals(t, true, gridMapPattern.MatchString(mapString))
+	equals(t, records, len(dotRegex.FindAllString(mapString, -1)))
+}
+
+func TestPlainMap(t *testing.T) {
+	name := "Test"
+	records := 5
+
+	tl := NewRecordList(mixedNonVoucher, "Test")
+
+	mapRegex := fmt.Sprintf(`^(?s).*<svg\n *viewBox.*infoBox.*>%s*<.*>Total records: %d<.*<\/svg>.*$`, name, records)
+
+	dotRegex := regexp.MustCompile(`(?m)^<circle cx="\d*" cy="\d*" r="\d" style="fill:black" \/>$`)
+
+	exactMapPattern := regexp.MustCompile(mapRegex)
+
+	mapBuffer := new(bytes.Buffer)
+	ExactMap(tl, mapBuffer)
+
+	mapString := mapBuffer.String()
+
+	equals(t, true, exactMapPattern.MatchString(mapString))
+	equals(t, records, len(dotRegex.FindAllString(mapString, -1)))
+
+}
+
+func TestWebMap(t *testing.T) {
+	name := "Test"
+	records := 5
+
+	tl := NewRecordList(mixedNonVoucher, "Test")
+
+	mapRegex := fmt.Sprintf(`^(?sm)<\?xml version.*<svg\n *viewBox.*<g style.*Tasmanian Herbarium.*>%s<.*>Total records: %d<.*<\/svg>$`, name, records)
+
+	dotRegex := regexp.MustCompile(`(?m)^<circle cx="\d*" cy="\d*" r="\d" style="fill:black" \/>$`)
+
+	exactMapPattern := regexp.MustCompile(mapRegex)
+
+	mapBuffer := new(bytes.Buffer)
+	WebMap(tl, mapBuffer)
+
+	mapString := mapBuffer.String()
+
+	equals(t, true, exactMapPattern.MatchString(mapString))
+	equals(t, records, len(dotRegex.FindAllString(mapString, -1)))
 
 }
