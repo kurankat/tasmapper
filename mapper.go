@@ -167,14 +167,6 @@ func (r *RecordList) FileName() string {
 	return fn
 }
 
-func (r *RecordList) GetName() string {
-	return r.name
-}
-
-func (or *RecordList) GetPlainRecords() *RecordList {
-	return or
-}
-
 func (or *RecordList) GetGridRecords() (nr *RecordList) {
 	nr = &RecordList{name: or.name, numRecs: or.numRecs}
 	nr.recordSlice = []record{}
