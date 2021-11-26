@@ -46,41 +46,32 @@ var (
 	viewBox string = `viewBox="0 0 ` + fmt.Sprint(canvasWidth) + " " + fmt.Sprint(canvasHeight) + `"`
 )
 
-func VoucherMap(records *RecordList, w io.Writer) {
+// Mapping functions to draw the differen types of maps
+
+// exactMap webMap draws a plain map with all records mapped as black disks at their exact coordinates
+// and composes an information box with the taxon name, number of records and date.
+func ExactMap(records *RecordList, w io.Writer) {
 	canvas = svg.New(w)
 
 	canvas.Startraw(viewBox)
 
 	canvas.Gid("theLot")
-	drawGridMap()
-	gridBox(records)
+	drawPlainMap()
+	plainBox(records)
 
 	canvas.Gid("dots")
-
-	for i, hor := range records.voucherGrid {
-		for j, ver := range hor {
-			dotXCoord := i*25 + 13 + leftMargin
-			dotYCoord := j*25 + 13 + topMargin
-			if ver > 0 {
-				var fill string
-				switch ver {
-				case 1:
-					fill = "fill:black"
-				case 2:
-					fill = "fill:white"
-				}
-				style := fill + ";stroke-width:3px;stroke:black"
-				canvas.Circle(dotXCoord, dotYCoord, 9, style)
-			}
-		}
+	for _, l := range records.recordSlice {
+		canvas.Circle(l.h, l.v, l.rad, "fill:black")
 	}
-
 	canvas.Gend()
 	canvas.Gend()
 
 	canvas.End()
 }
 
+// webMap draws a plain map with all records mapped as black disks at their exact coordinates.
+// This type of map is used primarily by the Flora of Tasmania Online site and contains no visually
+// separate information box.
 func WebMap(records *RecordList, w io.Writer) {
 	canvas = svg.New(w)
 
@@ -88,9 +79,11 @@ func WebMap(records *RecordList, w io.Writer) {
 
 	canvas.Gid("theLot")
 	drawPlainMap()
-	webBox(records)
+	webInfo(records)
 
 	canvas.Gid("dots")
+
+	// Range thorugh all the records and map each dot exactly where it falls, as a black disk
 	for _, l := range records.recordSlice {
 		canvas.Circle(l.h, l.v, l.rad, "fill:black")
 	}
@@ -99,6 +92,9 @@ func WebMap(records *RecordList, w io.Writer) {
 	canvas.End()
 }
 
+// voucherMap draws a grid map using lines along a 10 x 10 km UTM grid using datum MGA94.
+// It matches all records to grid cells and draws a black disk for each grid cell that contains
+// at least one record,
 func GridMap(records *RecordList, w io.Writer) {
 	gridList := records.GetGridRecords()
 	canvas = svg.New(w)
@@ -129,44 +125,73 @@ func GridMap(records *RecordList, w io.Writer) {
 	canvas.End()
 }
 
-func ExactMap(records *RecordList, w io.Writer) {
+// voucherMap draws a grid map and discriminates between cells that contain only anecdotal records (drawn
+// as white disks) and cells that contain at least one vouchered record (drawn as a black disk).
+func VoucherMap(records *RecordList, w io.Writer) {
 	canvas = svg.New(w)
 
 	canvas.Startraw(viewBox)
 
 	canvas.Gid("theLot")
-	drawPlainMap()
-	plainBox(records)
+	drawGridMap()
+	gridBox(records)
 
 	canvas.Gid("dots")
-	for _, l := range records.recordSlice {
-		canvas.Circle(l.h, l.v, l.rad, "fill:black")
+
+	// For each grid square that has records, draw black disk if cell contains a vouchered record,
+	// or white disk if it only contains anecdotal records
+	for i, hor := range records.voucherGrid {
+		for j, ver := range hor {
+			dotXCoord := i*25 + 13 + leftMargin
+			dotYCoord := j*25 + 13 + topMargin
+			if ver > 0 {
+				var fill string
+				switch ver {
+				case 1:
+					fill = "fill:black"
+				case 2:
+					fill = "fill:white"
+				}
+				style := fill + ";stroke-width:3px;stroke:black"
+				canvas.Circle(dotXCoord, dotYCoord, 9, style)
+			}
+		}
 	}
+
 	canvas.Gend()
 	canvas.Gend()
 
 	canvas.End()
 }
 
+// Structures and methods for holding map and record data
+
+// RecordList is a data structure that holds metadata pertaining to all the records of a taxon,
+// such as the name, how many records there are, how many cells are populated (for grid maps), or
+// how many records are anecdotal or vouchered.
 type RecordList struct {
-	numRecs      int
-	numCells     int
-	numVouchered int
-	numAnecdotal int
-	name         string
-	recordSlice  []record
-	voucherGrid  [50][50]int
+	numRecs      int         // Total number of records
+	numCells     int         // Number of cells occupied (in grid maps)
+	numVouchered int         // Number of cells containing vouchered records (optional)
+	numAnecdotal int         // Number of cells containing only anecdotal records (optional)
+	name         string      // Name of taxon for which to draw map
+	recordSlice  []record    // Slice containing the spatial data for each record that belongs to this taxon
+	voucherGrid  [50][50]int // Array of information describing the presence or absence (and type) of records in each cell for a grid map
 }
 
+// RecordNumber returns the total number of records
 func (r *RecordList) RecordNumber() (n int) {
 	return r.numRecs
 }
 
+// FileName returns the name to be used to save the SVG file, composed from the taxon name
 func (r *RecordList) FileName() string {
 	fn := strings.Replace(r.name, " ", "_", -1) + ".svg"
 	return fn
 }
 
+// GetGridRecords populates the voucher information for a RecordList, populating cells if
+// there is a record that falls inside them.
 func (or *RecordList) GetGridRecords() (nr *RecordList) {
 	nr = &RecordList{name: or.name, numRecs: or.numRecs}
 	nr.recordSlice = []record{}
@@ -181,7 +206,7 @@ func (or *RecordList) GetGridRecords() (nr *RecordList) {
 			} else {
 				nr.voucherGrid[rec.gridH][rec.gridV] = 2
 			}
-			// If the cell is only unvouchered and the new record in vouchered, mark it 1 - vouchered
+			// If the cell is only unvouchered and the new record is vouchered, mark it 1 - vouchered
 		} else if nr.voucherGrid[rec.gridH][rec.gridV] == 2 {
 			if rec.voucher {
 				nr.voucherGrid[rec.gridH][rec.gridV] = 1
@@ -190,7 +215,8 @@ func (or *RecordList) GetGridRecords() (nr *RecordList) {
 		nr.recordSlice = append(nr.recordSlice, rec)
 	}
 
-	// Add the total number of populated cells
+	// Add the total number of populated cells and calculate how many are only populated with
+	// anecdotal records, and how many contain a voucher
 	for i := range nr.voucherGrid {
 		for _, j := range nr.voucherGrid[i] {
 			if j > 0 {
@@ -207,39 +233,9 @@ func (or *RecordList) GetGridRecords() (nr *RecordList) {
 	return nr
 }
 
-// Helper functions
-
-// dmsToDD takes in a latitude and longitude in degrees, minutes and seconds, and returns the same
-// coordinates in decimal degrees
-func dmsToDD(latDeg, latMin, latSec, lonDeg, lonMin, lonSec float64) (ddLat, ddLon float64) {
-	ddLat = latDeg + latMin/60 + latSec/3600
-	ddLon = lonDeg + lonMin/60 + lonSec/3600
-	return
-}
-
-// llParse parses a coordinate string into a floating point number and returns 0 is the string
-// cannot be prsed
-func llParse(coord string) (parsed float64) {
-	parsed, err := strconv.ParseFloat(coord, 64)
-	if err != nil {
-		return 0
-	}
-	return
-}
-
-// voucherStatus takes in a voucher string and returns true if the voucher string is "a" or "1"
-func voucherStatus(voucherString string) (voucherStatus bool) {
-	switch voucherString {
-	case "v":
-		voucherStatus = true
-	case "1":
-		voucherStatus = true
-	default:
-		voucherStatus = false
-	}
-	return
-}
-
+// NewRecordList takes in a string of coordinate data and a name for the taxon being mapped.
+// It compares to regular expressions to decide whether the dataset contains voucher information or not,
+// and passes the data to the correct function to compose a RecordList depending on the data type.
 func NewRecordList(coordData string, name string) (rl *RecordList) {
 	firstLine := strings.TrimSpace(strings.Split(coordData, "\n")[0])
 	dataReader := strings.NewReader(coordData)
@@ -257,6 +253,7 @@ func NewRecordList(coordData string, name string) (rl *RecordList) {
 	return rl
 }
 
+// newNonVoucherRecordList creates a RecordList object that does not hold voucher information.
 func newNonVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 	rl = &RecordList{}
 	rl.name = name
@@ -270,6 +267,7 @@ func newNonVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 		line := strings.TrimSpace(dataScanner.Text())
 		splitLine := strings.Split(line, ",")
 
+		// How to ingest a data line if it is in degrees, minutes, seconds
 		if dmsPattern.MatchString(line) {
 			var lat, lon float64
 			latDeg := llParse(splitLine[0])
@@ -284,7 +282,7 @@ func newNonVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 				rl.numRecs++
 				rl.recordSlice = append(rl.recordSlice, *rec)
 			}
-		} else if ddPattern.MatchString(line) {
+		} else if ddPattern.MatchString(line) { // How to ingest a line of decimal degree coordinates
 			lat := llParse(splitLine[0])
 			lon := llParse(splitLine[1])
 
@@ -298,6 +296,8 @@ func newNonVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 	return rl
 }
 
+// newVoucherRecordList creates a RecordList object that does holds voucher information. Records
+// will have the voucher field populated.
 func newVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 	tempList := new(RecordList)
 	tempList.name = name
@@ -311,7 +311,7 @@ func newVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 		splitLine := strings.Split(line, ",")
 		var voucher bool
 
-		if dmsPattern.MatchString(line) {
+		if dmsPattern.MatchString(line) { // How to deal with data that matches the pattern for degrees, minutes and seconds
 			var lat, lon float64
 
 			latDeg := llParse(splitLine[0])
@@ -329,7 +329,7 @@ func newVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 				tempList.numRecs++
 				tempList.recordSlice = append(tempList.recordSlice, *rec)
 			}
-		} else if ddPattern.MatchString(line) {
+		} else if ddPattern.MatchString(line) { // How to deal with data that matches the pattern for decimal degrees.
 			lat := llParse(splitLine[0])
 			lon := llParse(splitLine[1])
 
@@ -346,16 +346,20 @@ func newVoucherRecordList(data io.Reader, name string) (rl *RecordList) {
 	return
 }
 
+// record holds the information needed to map each point, including the latitude and longitude, UTM coordinates,
+// and coordinates on the SVG map, as well as radius and fill colour used to distinguish anecdotal from vouchered records
 type record struct {
-	lat, lon     float64
-	h, v         int
-	utmE, utmN   int
-	dotH, dotV   int
-	gridH, gridV int
-	rad          int
-	voucher      bool
+	lat, lon     float64 // Exact latitude and longitude of record
+	h, v         int     // Horizontal and vertical position of record in map in pixels
+	utmE, utmN   int     // Complete UTM grid easting and northing of record
+	dotH, dotV   int     // Horizontal and vertical position of dots on a 25x25 pixel grid
+	gridH, gridV int     // Position as individual cell in grid
+	rad          int     // Radius of SVG circle
+	voucher      bool    // Whether this record is anecdotal or vouchered (optional, no info means vouchered)
 }
 
+// newRecord takes in a latitude and longitude in decimal degrees and returns a pointer to a record object.
+// The record object returned does not contain any voucher information.
 func newRecord(lat, lon float64) (r *record) {
 	r = new(record)
 	r.lat, r.lon = lat, lon
@@ -393,6 +397,8 @@ func newRecord(lat, lon float64) (r *record) {
 	return r
 }
 
+// newVoucherRecord takes in a latitude and longitude in decimal degrees, as well as voucher status, and
+// returns a pointer to a record object that also contains voucher information.
 func newVoucherRecord(lat, lon float64, voucher bool) (r *record) {
 	r = new(record)
 	r.lat, r.lon = lat, lon
@@ -429,4 +435,37 @@ func newVoucherRecord(lat, lon float64, voucher bool) (r *record) {
 	r.v = v + topMargin
 
 	return r
+}
+
+// Helper functions
+
+// dmsToDD takes in a latitude and longitude in degrees, minutes and seconds, and returns the same
+// coordinates in decimal degrees
+func dmsToDD(latDeg, latMin, latSec, lonDeg, lonMin, lonSec float64) (ddLat, ddLon float64) {
+	ddLat = latDeg + latMin/60 + latSec/3600
+	ddLon = lonDeg + lonMin/60 + lonSec/3600
+	return
+}
+
+// llParse parses a coordinate string into a floating point number and returns 0 is the string
+// cannot be prsed
+func llParse(coord string) (parsed float64) {
+	parsed, err := strconv.ParseFloat(coord, 64)
+	if err != nil {
+		return 0
+	}
+	return
+}
+
+// voucherStatus takes in a voucher string and returns true if the voucher string is "a" or "1"
+func voucherStatus(voucherString string) (voucherStatus bool) {
+	switch voucherString {
+	case "v":
+		voucherStatus = true
+	case "1":
+		voucherStatus = true
+	default:
+		voucherStatus = false
+	}
+	return
 }
